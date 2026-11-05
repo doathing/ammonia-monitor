@@ -1,6 +1,6 @@
 'use strict';
 
-// Project the visible part of a segment onto the nearest point to the label.
+// Clip a segment to the plot and return the visible point closest to the target.
 function nearestCurvePoint(start,end,target,bounds){
   let lo=0,hi=1;
   const delta=[end[0]-start[0],end[1]-start[1]];
@@ -47,53 +47,46 @@ function curveLabelSegments(chart,lines,from,to){
   return segments;
 }
 
-function curveLabelAnchor(segments,target,bounds){
-  let nearest=null,distance=Infinity;
+// A coarse occupancy map lets labels favor gaps between visible curves.
+const curveLabelCell=8;
+function curveLabelSamples(segments,bounds,ink){
+  const candidates=new Map();
   for(const [start,end] of segments){
-    const point=nearestCurvePoint(start,end,target,bounds);
-    if(!point)continue;
-    const squared=(point[0]-target[0])**2+(point[1]-target[1])**2;
-    if(squared<distance){distance=squared;nearest=point;}
+    const a=nearestCurvePoint(start,end,start,bounds);
+    if(!a)continue;
+    const b=nearestCurvePoint(start,end,end,bounds);
+    const steps=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/4));
+    for(let i=0;i<=steps;i++){
+      const x=a[0]+(b[0]-a[0])*i/steps,y=a[1]+(b[1]-a[1])*i/steps;
+      ink.add(Math.floor(x/curveLabelCell)+','+Math.floor(y/curveLabelCell));
+      candidates.set(Math.floor(x/20)+','+Math.floor(y/16),[x,y]);
+    }
   }
-  return nearest;
+  return [...candidates.values()];
 }
 
-function curveLabelCard(entries,bounds,size,planned){
-  if(!entries.length)return null;
-  const plotWidth=bounds.right-bounds.left,plotHeight=bounds.bottom-bounds.top;
-  const insetX=Math.min(42,plotWidth*.045),insetY=Math.min(24,plotHeight*.06);
-  const padding=9,heading=22,rowHeight=size+8;
-  const rows=Math.max(1,Math.floor((plotHeight/2-insetY-heading-padding)/rowHeight));
-  const columns=Math.ceil(entries.length/rows);
-  const columnWidth=Math.min(Math.max(...entries.map(entry=>entry.width))+29,(plotWidth/2-insetX-2*padding)/columns);
-  if(columnWidth<26)return null;
-  const width=columnWidth*columns+2*padding;
-  const height=heading+Math.min(rows,entries.length)*rowHeight+padding;
-  const x=planned?bounds.left+insetX:bounds.right-insetX-width;
-  const y=planned?bounds.top+insetY:bounds.bottom-insetY-height;
-  const children=[
-    {type:'rect',z:9,shape:{x,y,width,height,r:7},style:{fill:'rgba(255,255,255,.96)',stroke:'#e0e7ef',lineWidth:1}},
-    {type:'text',z:10,style:{x:x+padding,y:y+7,text:planned?'计划':'实际',fontSize:size-1,fontWeight:600,fill:'#526680',verticalAlign:'top'}}
-  ];
-  entries.forEach((entry,index)=>{
-    const textX=x+padding+Math.floor(index/rows)*columnWidth;
-    const rowY=y+heading+(index%rows+.5)*rowHeight;
-    const edge=[planned?x+width:x,rowY];
-    const anchor=curveLabelAnchor(entry.segments,edge,bounds);
-    const stroke={stroke:entry.color,lineWidth:1.4,...(planned?{lineDash:[4,3]}:{})};
-    if(anchor){
-      const distance=Math.hypot(anchor[0]-edge[0],anchor[1]-edge[1]);
-      children.push({type:'line',z:8,shape:{x1:anchor[0],y1:anchor[1],x2:edge[0],y2:edge[1]},
-        style:{...stroke,lineWidth:1,opacity:distance>180?.23:.42}});
-      children.push({type:'circle',z:8,shape:{cx:anchor[0],cy:anchor[1],r:1.7},
-        style:{fill:entry.color,opacity:.7}});
+function curveLabelBox(points,width,height,bounds,ink,placed){
+  let best=null;
+  const middle=(bounds.left+bounds.right)/2;
+  for(const [px,py] of points){
+    const x=Math.max(bounds.left,Math.min(bounds.right-width,px-width/2));
+    for(const offset of [6,12,20])for(const side of [-1,1]){
+      const y=side<0?py-offset-height:py+offset;
+      if(y<bounds.top||y+height>bounds.bottom)continue;
+      if(placed.some(b=>x<b.x+b.width+4&&x+width+4>b.x&&y<b.y+b.height+4&&y+height+4>b.y))continue;
+      let crossings=0,nearby=0;
+      for(let col=Math.floor((x-6)/curveLabelCell);col<=Math.floor((x+width+6)/curveLabelCell);col++){
+        for(let row=Math.floor((y-6)/curveLabelCell);row<=Math.floor((y+height+6)/curveLabelCell);row++){
+          if(!ink.has(col+','+row))continue;
+          if(col*curveLabelCell<x+width&&(col+1)*curveLabelCell>x&&row*curveLabelCell<y+height&&(row+1)*curveLabelCell>y)crossings++;
+          else nearby++;
+        }
+      }
+      const score=crossings*100+nearby*2+offset*.4+Math.abs(px-middle)*.006;
+      if(!best||score<best.score)best={x,y,width,height,score};
     }
-    children.push({type:'line',z:10,shape:{x1:textX,y1:rowY,x2:textX+14,y2:rowY},style:stroke});
-    children.push({type:'text',z:10,style:{x:textX+20,y:rowY,text:entry.text,fontSize:size-1,
-      fontFamily:'"Segoe UI","Microsoft YaHei",sans-serif',fill:'#34465e',
-      width:columnWidth-24,overflow:'truncate',ellipsis:'…',verticalAlign:'middle'}});
-  });
-  return {id:planned?'curve-label-card-plan':'curve-label-card-actual',type:'group',silent:true,children};
+  }
+  return best;
 }
 
 function curveLabelGraphics(chart,series){
@@ -107,14 +100,30 @@ function curveLabelGraphics(chart,series){
   const grid=chart.getOption().grid[0],bounds={left:Number(grid.left)+4,right:chart.getWidth()-Number(grid.right)-4,top:Number(grid.top)+4,bottom:chart.getHeight()-Number(grid.bottom)-4};
   const size=chartTextSize(),font=`600 ${size}px "Segoe UI","Microsoft YaHei",sans-serif`;
   const measure=document.createElement('canvas').getContext('2d');measure.font=font;
-  const entries={plan:[],actual:[]};
+  const ink=new Set(),entries=[],placed=[];
   for(const group of groups.values()){
     const segments=curveLabelSegments(chart,group.lines,from,to);
-    const center=[(bounds.left+bounds.right)/2,(bounds.top+bounds.bottom)/2];
-    if(!curveLabelAnchor(segments,center,bounds))continue;
+    const points=curveLabelSamples(segments,bounds,ink);
+    if(!points.length)continue;
     const line=group.lines[0];
-    const text=group.channel===9?`氨水 · ${line.name}`:trendChannels[group.channel].name;
-    entries[group.role].push({segments,text,color:line.lineStyle?.color||trendChannels[group.channel].color,width:measure.measureText(text).width});
+    const name=group.channel===9?`氨水 · ${line.name}`:trendChannels[group.channel].name;
+    const text=`${name} · ${group.role==='plan'?'计划':'实际'}`;
+    entries.push({key:group.key,points,text,color:line.lineStyle?.color||trendChannels[group.channel].color});
   }
-  return [curveLabelCard(entries.plan,bounds,size,true),curveLabelCard(entries.actual,bounds,size,false)].filter(Boolean);
+  const height=size+8,graphics=[];
+  // Place curves with fewer available anchors first.
+  entries.sort((a,b)=>a.points.length-b.points.length);
+  for(const entry of entries){
+    const width=Math.min(measure.measureText(entry.text).width+14,bounds.right-bounds.left);
+    const box=curveLabelBox(entry.points,width,height,bounds,ink,placed);
+    if(!box)continue;
+    placed.push(box);
+    graphics.push({id:`curve-label-${entry.key}`,type:'group',silent:true,children:[
+      {type:'rect',z:9,shape:{x:box.x,y:box.y,width,height,r:3},style:{fill:'rgba(255,255,255,.91)'}},
+      {type:'text',z:10,style:{x:box.x+7,y:box.y+height/2,text:entry.text,fontSize:size,
+        fontWeight:600,fontFamily:'"Segoe UI","Microsoft YaHei",sans-serif',fill:entry.color,
+        width:Math.max(0,width-14),overflow:'truncate',ellipsis:'…',verticalAlign:'middle'}}
+    ]});
+  }
+  return graphics;
 }

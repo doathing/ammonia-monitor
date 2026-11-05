@@ -2,6 +2,7 @@ import { handle } from '../../../lib/monitor/service.mjs';
 import { cloudStore } from '../../../lib/monitor/storage';
 import { bumpLoginAttempt, clearLoginAttempts } from '../../../lib/monitor/cloud-client';
 import { files } from '../../../lib/monitor/files.mjs';
+import { restrictBatchStore } from '../../../lib/monitor/batch-access.mjs';
 import { env } from 'cloudflare:workers';
 import {authenticate,issueSession,readSession,sessionCookie,sameOrigin,rateKey} from '../../../lib/monitor/auth.mjs';
 export const dynamic='force-dynamic';
@@ -34,6 +35,6 @@ async function api(request:Request){
   if(request.method!=='GET'&&!user.canEdit)return response({detail:'当前账号只有查看权限，不能录入或修改数据。'},403);
   const length=Number(request.headers.get('content-length')||0);
   if(length>12*1024*1024)return Response.json({detail:'请求不能超过12MB。'},{status:413});
-  return handle(request,cloudStore(env),files);
+  return handle(request,restrictBatchStore(cloudStore(env),user,env.MONITOR_GUEST_BATCH_ID),files);
 }
 export {api as GET,api as POST,api as PUT,api as DELETE};

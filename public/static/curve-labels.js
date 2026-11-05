@@ -30,23 +30,26 @@ function curveLabelAnchor(lines,from,to,target){
   return best;
 }
 
-function curveLabelPosition(anchor,width,height,bounds,occupied){
-  const candidates=[],add=(x,y)=>{
-    x=Math.max(bounds.left,Math.min(bounds.right-width,x));
-    y=Math.max(bounds.top,Math.min(bounds.bottom-height,y));
-    if(occupied.some(box=>x<box.x+box.width+4&&x+width+4>box.x&&y<box.y+box.height+4&&y+height+4>box.y))return;
-    const dx=Math.max(x-anchor[0],0,anchor[0]-x-width),dy=Math.max(y-anchor[1],0,anchor[1]-y-height);
-    const distance=Math.hypot(dx,dy);
-    candidates.push({x,y,width,height,cost:Math.abs(distance-54)+(distance<36?100:0)});
-  };
-  for(const dy of [-height-54,54,-height-82,82,-height-36,36]){
-    for(const dx of [0,-width*.65,width*.65])add(anchor[0]-width/2+dx,anchor[1]+dy);
-  }
-  if(!candidates.length)for(let y=bounds.top;y+height<=bounds.bottom;y+=height+4){
-    for(let x=bounds.left;x+width<=bounds.right;x+=Math.max(30,width/2))add(x,y);
-  }
-  candidates.sort((a,b)=>a.cost-b.cost);
-  return candidates[0]||null;
+// Use opposite corners. Add columns inward when one stack cannot fit.
+function curveLabelCorner(entries,bounds,height,planned){
+  if(!entries.length)return [];
+  const gap=5,plotWidth=bounds.right-bounds.left,plotHeight=bounds.bottom-bounds.top;
+  const insetX=Math.min(80,plotWidth*.07),insetY=Math.min(36,plotHeight*.07);
+  const rowsPerColumn=Math.max(1,Math.floor((plotHeight/2-insetY+gap)/(height+gap)));
+  const columns=Math.ceil(entries.length/rowsPerColumn);
+  const widestLabel=Math.max(...entries.map(entry=>entry.width));
+  const columnWidth=Math.min(widestLabel,(plotWidth/2-insetX-gap*(columns-1))/columns);
+  if(columnWidth<24)return [];
+  const ordered=[...entries].sort((a,b)=>a.pixel[1]-b.pixel[1]);
+  return ordered.map((entry,index)=>{
+    const column=Math.floor(index/rowsPerColumn),row=index%rowsPerColumn;
+    const count=Math.min(rowsPerColumn,entries.length-column*rowsPerColumn);
+    const width=Math.min(entry.width,columnWidth);
+    const x=planned?bounds.left+insetX+column*(columnWidth+gap):
+      bounds.right-insetX-column*(columnWidth+gap)-width;
+    const top=planned?bounds.top+insetY:bounds.bottom-insetY-height-(count-1)*(height+gap);
+    return {...entry,box:{x,y:top+row*(height+gap),width}};
+  });
 }
 
 function curveLabelGraphics(chart,series){
@@ -60,24 +63,25 @@ function curveLabelGraphics(chart,series){
   const grid=chart.getOption().grid[0],bounds={left:Number(grid.left)+4,right:chart.getWidth()-Number(grid.right)-4,top:Number(grid.top)+4,bottom:chart.getHeight()-Number(grid.bottom)-4};
   const size=chartTextSize(),font=`600 ${size}px "Segoe UI","Microsoft YaHei",sans-serif`;
   const measure=document.createElement('canvas').getContext('2d');measure.font=font;
-  const graphics=[],occupied=[];
+  const entries={plan:[],actual:[]},height=size+12;
   for(const group of groups.values()){
-    const fraction=group.role==='plan'?[.34,.24,.56,.72,.46,.28,.43,.58,.74,.6,.4][group.channel]:[.58,.68,.78,.42,.64,.37,.52,.67,.82,.5,.6][group.channel];
+    const fraction=group.role==='plan'?.32:.62;
     const anchor=curveLabelAnchor(group.lines,from,to,from+(to-from)*fraction);if(!anchor)continue;
     const pixel=[chart.convertToPixel({xAxisIndex:0},anchor.x),chart.convertToPixel({yAxisIndex:anchor.line.yAxisIndex||0},anchor.y)];
     if(pixel.some(value=>!Number.isFinite(value))||pixel[1]<bounds.top-4||pixel[1]>bounds.bottom+4)continue;
     const name=group.channel===9?`氨水 · ${anchor.line.name}`:trendChannels[group.channel].name;
     const text=group.channel===9?`氨水 · 实际 · ${anchor.line.name}`:`${name} · ${group.role==='plan'?'计划':'实际'}`,color=anchor.line.lineStyle?.color||trendChannels[group.channel].color;
-    const width=Math.min(measure.measureText(text).width+22,bounds.right-bounds.left),height=size+12;
-    const box=curveLabelPosition(pixel,width,height,bounds,occupied);if(!box)continue;
-    occupied.push(box);
+    entries[group.role].push({key:group.key,pixel,text,color,width:measure.measureText(text).width+22});
+  }
+  const placed=[...curveLabelCorner(entries.plan,bounds,height,true),...curveLabelCorner(entries.actual,bounds,height,false)];
+  return placed.map(({key,pixel,text,color,box})=>{
+    const {width}=box;
     const endX=Math.max(box.x,Math.min(box.x+width,pixel[0])),endY=pixel[1]<box.y?box.y:pixel[1]>box.y+height?box.y+height:pixel[1];
-    graphics.push({id:`curve-label-${group.key}`,type:'group',silent:true,children:[
+    return {id:`curve-label-${key}`,type:'group',silent:true,children:[
       {type:'line',silent:true,z:8,shape:{x1:pixel[0],y1:pixel[1],x2:endX,y2:endY},style:{stroke:color,lineWidth:1.3,opacity:.85}},
       {type:'circle',silent:true,z:8,shape:{cx:pixel[0],cy:pixel[1],r:2.3},style:{fill:color}},
       {type:'rect',silent:true,z:9,shape:{x:box.x,y:box.y,width,height,r:3},style:{fill:'rgba(255,255,255,0.94)'}},
       {type:'text',silent:true,z:10,style:{x:box.x+7,y:box.y+6,text,fontSize:size,fontWeight:600,fontFamily:'"Segoe UI","Microsoft YaHei",sans-serif',fill:color,width:Math.max(0,width-14),overflow:'truncate',ellipsis:'…',verticalAlign:'top'}}
-    ]});
-  }
-  return graphics;
+    ]};
+  });
 }

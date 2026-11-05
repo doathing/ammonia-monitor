@@ -8,7 +8,7 @@ function renderMonitor(){
         <div class="chart-controls">
           <select id="curve-visibility" aria-label="曲线显示"><option value="both" ${state.visibility==='both'?'selected':''}>计划 + 实际</option><option value="actual" ${state.visibility==='actual'?'selected':''}>仅实际</option><option value="plan" ${state.visibility==='plan'?'selected':''}>仅计划</option></select>
           <select id="chart-range" aria-label="图表时间范围"><option value="all">全程</option><option value="24">最近 24h</option><option value="8">最近 8h</option><option value="2">最近 2h</option><option value="custom">自定义时间段</option></select>
-          <button class="btn small" data-action="time-range">设置时间段</button><button class="btn small" data-action="actual-data">录入实际数据</button><button class="btn small" data-action="curve-note">＋说明</button><button class="btn small" data-action="fullscreen" aria-label="全屏综合趋势">⛶ 全屏</button>
+          <button class="btn small" data-action="time-range">设置时间段</button><button class="btn small" data-action="trend-axes">纵轴设置</button><button class="btn small" data-action="actual-data">录入实际数据</button><button class="btn small" data-action="curve-note">＋说明</button><button class="btn small" data-action="fullscreen" aria-label="全屏综合趋势">⛶ 全屏</button>
         </div>
       </div>${stagePanel()}
       <div class="combined-legend">${trendChannels.map((channel,index)=>`<label><input type="checkbox" data-channel="${index}" ${state.channels[index]?'checked':''}><span class="legend-line ${index>=5&&index<=8?'rate-legend-line':''}" style="--c:${channel.color}"></span>${channel.name}</label>`).join('')}<span class="muted">实线：实际　虚线：计划　浅色分区：实际阶段</span></div>

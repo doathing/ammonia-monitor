@@ -73,20 +73,62 @@ function fittedAxisRange(values,index){
   return {min:Number((Math.floor(a/step)*step).toPrecision(10)),max:Number((Math.ceil(b/step)*step).toPrecision(10)),interval:step};
 }
 
+const axisPreferenceKey='ammonia-trend-axes';
+let axisPreferences={ranges:{},grid:'auto'};
+try {
+  const saved=JSON.parse(localStorage.getItem(axisPreferenceKey));
+  if(saved?.ranges)axisPreferences=saved;
+}catch{}
+
+function trendAxisTitles(){
+  return ['热点温度 / ℃','系统压力 / MPa','水汽 / ppmv','升温速率 / ℃/h','升压速率 / MPa/h',`氨水 / ${ammoniaUnits[state.ammoniaPlotUnit]||'质量分数 %'}`];
+}
+
+function trendAxisSettingsModal(){
+  const titles=trendAxisTitles();
+  const inputs=titles.map((title,index)=>{
+    const range=axisPreferences.ranges[title]||{};
+    return `<tr><th scope="row">${esc(title)}</th>${['min','max','interval'].map((field,i)=>`<td><input class="plan-input" type="number" step="any" name="${field}-${index}" aria-label="${esc(title)} ${['最小值','最大值','刻度间隔'][i]}" value="${esc(range[field]??'')}" placeholder="自动"></td>`).join('')}</tr>`;
+  }).join('');
+  modal('纵轴设置',`<form><p class="modal-copy">最小值和最大值请一起填写。设置范围后可指定刻度间隔，留空沿用默认刻度。横向虚线按所选纵轴的刻度绘制。</p><div class="table-wrap"><table><thead><tr><th>纵轴</th><th>最小值</th><th>最大值</th><th>刻度间隔</th></tr></thead><tbody>${inputs}</tbody></table></div><label class="field">横向虚线<select name="grid"><option value="auto">自动（首个可见纵轴）</option><option value="off">关闭</option>${titles.map((title,index)=>`<option value="${index}">${esc(title)}</option>`).join('')}</select></label>${formFooter('应用设置','<button class="btn left" type="button" id="reset-trend-axes">恢复默认</button>')}</form>`,true);
+  $('#modal [name="grid"]').value=axisPreferences.grid;
+  const apply=preferences=>{
+    axisPreferences=preferences;
+    localStorage.setItem(axisPreferenceKey,JSON.stringify(preferences));
+    closeModal();
+    updateTrendLayout();
+  };
+  $('#reset-trend-axes').onclick=()=>apply({ranges:{},grid:'auto'});
+  wireForm(async form=>{
+    const ranges={...axisPreferences.ranges};
+    for(const [index,title] of titles.entries()){
+      const values=['min','max','interval'].map(field=>form.get(`${field}-${index}`));
+      const [min,max,interval]=values.map(value=>value===''?null:Number(value));
+      if(min===null&&max===null&&interval===null){delete ranges[title];continue;}
+      const span=max-min;
+      if(min===null||max===null||!Number.isFinite(span)||span<=0)throw new Error(`${title} 的最大值须大于最小值。`);
+      if(interval!==null&&(!Number.isFinite(interval)||interval<=0||interval>span||span/interval>80))throw new Error(`${title} 的刻度间隔须大于零，且范围内最多分为 80 格。`);
+      ranges[title]={min,max,...(interval===null?{}:{interval})};
+    }
+    apply({ranges,grid:form.get('grid')});
+  });
+}
+
 function trendAxes(series){
   const layout=trendLayoutSpec(),size=Math.max(10,Math.min(11,chartTextSize()-1)),[from,to]=trendTimeWindow();
-  const titles=['热点温度 / ℃','系统压力 / MPa','水汽 / ppmv','升温速率 / ℃/h','升压速率 / MPa/h',`氨水 / ${ammoniaUnits[state.ammoniaPlotUnit]||'质量分数 %'}`];
+  const titles=trendAxisTitles();
+  const gridAxis=axisPreferences.grid==='auto'?layout.active[0]:axisPreferences.grid==='off'?-1:Number(axisPreferences.grid);
   const inks=['#6482ac','#d39333','#439fd1','#687fa4','#b7823b','#9a73d5'];
   return titles.map((name,index)=>{
     const onLeft=layout.left.includes(index),slot=(onLeft?layout.left:layout.right).indexOf(index),show=layout.active.includes(index);
     return {id:`process-axis-${index}`,type:'value',show,scale:true,name,position:onLeft?'left':'right',offset:Math.max(0,slot)*layout.lane,
       nameLocation:'middle',nameRotate:onLeft?90:270,nameGap:window.innerWidth<600?35:39,
       nameTextStyle:{color:inks[index],fontSize:size,fontWeight:700},
-      ...fittedAxisRange(visibleAxisValues(series,index,from,to),index),splitNumber:4,
+      ...(axisPreferences.ranges[name]||fittedAxisRange(visibleAxisValues(series,index,from,to),index)),splitNumber:4,
       axisLabel:{color:inks[index],fontSize:size,fontWeight:600,hideOverlap:true,margin:4,
         formatter:value=>Math.abs(value)>=1000?`${Number((value/1000).toPrecision(4))}k`:value!==0&&Math.abs(value)<.001?value.toExponential(1):Number(value.toPrecision(5)).toLocaleString('en-US',{maximumFractionDigits:index===4?4:index===1?3:2})},
       axisLine:{show:false},axisTick:{show:false},axisPointer:{show},
-      splitLine:{show:index===(layout.active[0]??-1),lineStyle:{color:'#edf2fa',type:'dashed'}}};
+      splitLine:{show:show&&index===gridAxis,lineStyle:{color:'#d9e4f2',type:'dashed'}}};
   });
 }
 

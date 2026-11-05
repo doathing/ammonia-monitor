@@ -36,9 +36,10 @@ function curveLabelPosition(anchor,width,height,bounds,occupied){
     y=Math.max(bounds.top,Math.min(bounds.bottom-height,y));
     if(occupied.some(box=>x<box.x+box.width+4&&x+width+4>box.x&&y<box.y+box.height+4&&y+height+4>box.y))return;
     const dx=Math.max(x-anchor[0],0,anchor[0]-x-width),dy=Math.max(y-anchor[1],0,anchor[1]-y-height);
-    candidates.push({x,y,width,height,cost:dx*dx+dy*dy});
+    const distance=Math.hypot(dx,dy);
+    candidates.push({x,y,width,height,cost:Math.abs(distance-54)+(distance<36?100:0)});
   };
-  for(const dy of [-height-8,8,-2*height-12,height+12,-3*height-16,2*height+16]){
+  for(const dy of [-height-54,54,-height-82,82,-height-36,36]){
     for(const dx of [0,-width*.65,width*.65])add(anchor[0]-width/2+dx,anchor[1]+dy);
   }
   if(!candidates.length)for(let y=bounds.top;y+height<=bounds.bottom;y+=height+4){
@@ -72,7 +73,8 @@ function curveLabelGraphics(chart,series){
     occupied.push(box);
     const endX=Math.max(box.x,Math.min(box.x+width,pixel[0])),endY=pixel[1]<box.y?box.y:pixel[1]>box.y+height?box.y+height:pixel[1];
     graphics.push({id:`curve-label-${group.key}`,type:'group',silent:true,children:[
-      {type:'line',silent:true,z:8,shape:{x1:pixel[0],y1:pixel[1],x2:endX,y2:endY},style:{stroke:color,lineWidth:1,opacity:.65}},
+      {type:'line',silent:true,z:8,shape:{x1:pixel[0],y1:pixel[1],x2:endX,y2:endY},style:{stroke:color,lineWidth:1.3,opacity:.85}},
+      {type:'circle',silent:true,z:8,shape:{cx:pixel[0],cy:pixel[1],r:2.3},style:{fill:color}},
       {type:'rect',silent:true,z:9,shape:{x:box.x,y:box.y,width,height,r:3},style:{fill:'rgba(255,255,255,0.94)'}},
       {type:'text',silent:true,z:10,style:{x:box.x+7,y:box.y+6,text,fontSize:size,fontWeight:600,fontFamily:'"Segoe UI","Microsoft YaHei",sans-serif',fill:color,width:Math.max(0,width-14),overflow:'truncate',ellipsis:'…',verticalAlign:'top'}}
     ]});

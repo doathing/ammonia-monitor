@@ -1,5 +1,5 @@
 'use strict';
-const readActions=new Set(['close','time-range','fullscreen','show-plan','source-plan','export','logout']);
+const readActions=new Set(['close','time-range','trend-axes','fullscreen','show-plan','source-plan','export','logout']);
 document.addEventListener('click',event=>{
   const action=event.target.closest('[data-action]'),context=event.target.closest('[data-context]');
   if(action?.dataset.action==='logout'){

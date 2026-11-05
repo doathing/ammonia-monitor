@@ -210,6 +210,7 @@ document.addEventListener('click',async event=>{
       case 'batch':batchModal();break;
       case 'sample':sampleModal();break;
       case 'time-range':timeRangeModal();break;
+      case 'trend-axes':trendAxisSettingsModal();break;
       case 'actual-data':cursorReadingsModal(state.cursor??ms(state.detail.view_time));break;
       case 'next-reading':cursorReadingsModal(nextReadingTime(),{source:'next'});break;
       case 'fullscreen':await toggleTrendFullscreen();break;

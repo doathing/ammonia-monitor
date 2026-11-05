@@ -1,0 +1,4 @@
+body.access-viewer [data-action]:not([data-action="close"],[data-action="time-range"],[data-action="fullscreen"],[data-action="show-plan"],[data-action="source-plan"],[data-action="export"],[data-action="logout"]),
+body.access-viewer [data-context]:not([data-context="export"]){display:none!important}
+body.access-viewer .heading-actions,body.access-viewer .plan-input{pointer-events:none}
+#account-role{font-size:12px;color:#536b8c;white-space:nowrap}

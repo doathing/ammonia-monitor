@@ -1,0 +1,11 @@
+.chart-context-menu{position:fixed;z-index:90;width:285px;max-width:calc(100vw - 16px);padding:7px;background:#fff;border:1px solid #dbe5f4;border-radius:12px;box-shadow:0 12px 40px #24467429;color:#29466a}
+.context-time{padding:9px 11px 12px;font-size:14px;font-weight:700;border-bottom:1px solid #edf2fa;margin-bottom:5px}
+.context-time small{display:block;margin-top:4px;font-size:11px;font-weight:500;color:#8194af}
+.chart-context-menu button{display:flex;align-items:center;gap:9px;width:100%;border:0;border-radius:7px;background:#fff;color:#355278;padding:12px 10px;text-align:left;font:inherit;font-size:13px;cursor:pointer}
+.chart-context-menu button:hover,.chart-context-menu button:focus-visible{background:#edf4ff;color:#245ee9;outline:none}
+.chart-context-menu svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7}
+.cursor-reading-group{border:1px solid #e0e8f5;border-radius:10px;margin:20px 0 0;padding:17px;min-width:0}
+.cursor-reading-group legend{padding:0 7px;font-size:13px;font-weight:700;color:#45658e}
+.cursor-replace{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.7;margin-top:18px;color:#7588a3}
+.cursor-replace input{margin-top:4px;flex-shrink:0}
+#process-chart-panel #toast{left:50%}

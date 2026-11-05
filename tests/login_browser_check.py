@@ -27,11 +27,22 @@ with sync_playwright() as p:
     assert r.ok,r.text();eid=r.json()['id']
     assert admin.request.delete(URL+f'/api/batches/{bid}/events/{eid}').ok
     checks.append('admin signs in, renders chart, and can create/delete data')
+    other_bid=bid
+    batches=admin.request.get(URL+'/api/batches').json()
+    target=next((b for b in batches if b['name']=='1261升温还原'),None)
+    if target is None:
+        created=admin.request.post(URL+'/api/batches',data={'name':'1261升温还原','start_time':'2026-11-01T08:00:00+08:00','initial':[20,21,22]})
+        assert created.ok,created.text()
+        bid=created.json()['id']
+    else:bid=target['id']
     guest=browser.new_context(viewport={'width':1440,'height':1000},timezone_id='Asia/Shanghai')
     view=guest.new_page();view.on('pageerror',lambda error:errors.append(str(error)))
     view.goto(URL);view.locator('[name="username"]').fill('guest');view.locator('[name="password"]').fill('viewer-test-password');view.get_by_role('button',name='登录',exact=True).click()
     view.get_by_text('guest · 只读查看',exact=True).wait_for();view.locator('#chart-0 canvas').wait_for()
     assert guest.request.get(URL+'/api/session/me').json()['canEdit'] is False
+    assert [b['id'] for b in guest.request.get(URL+'/api/batches').json()]==[bid]
+    assert guest.request.get(URL+f'/api/batches/{other_bid}').status==404
+    assert guest.request.get(URL+f'/api/batches/{other_bid}/export/backup').status==404
     assert guest.request.get(URL+f'/api/batches/{bid}').ok
     assert guest.request.get(URL+f'/api/batches/{bid}/export/samples').ok
     for method,path in [('POST','/api/batches'),('POST','/api/demo'),('POST','/api/restore'),('POST',f'/api/batches/{bid}/cursor-readings'),('PUT',f'/api/batches/{bid}/curve-plan/0'),('DELETE',f'/api/batches/{bid}/samples/fake')]:

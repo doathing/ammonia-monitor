@@ -52,7 +52,7 @@ with sync_playwright() as p:
     checks.append('atomic readings and independent concentrations persist in local D1; invalid multi-part write leaves no partial data')
     # An independent browser context has no batch localStorage or cache.
     b=browser.new_context(viewport={'width':1440,'height':1000},timezone_id='Asia/Shanghai')
-    second=b.new_page();second.goto(URL);second.locator('[name="username"]').fill('guest');second.locator('[name="password"]').fill('viewer-test-password');second.get_by_role('button',name='登录',exact=True).click();second.get_by_text('guest · 只读查看',exact=True).wait_for()
+    second=b.new_page();second.goto(URL);second.locator('[name="username"]').fill('admin');second.locator('[name="password"]').fill('editor-test-password');second.get_by_role('button',name='登录',exact=True).click();second.get_by_text('admin · 编辑权限',exact=True).wait_for()
     second.locator('#batch-select').select_option(bid)
     second.wait_for_function('state.detail?.samples.length===1')
     assert second.evaluate('state.detail.concentrations.ammonia[0].note')=='跨电脑测试'

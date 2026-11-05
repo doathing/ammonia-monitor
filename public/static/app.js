@@ -63,7 +63,7 @@ function render(){
   const content=$('#content');
   if(state.tab==='help'){content.innerHTML=helpView();return;}
   if(!state.detail){content.innerHTML=`<div class="empty-state"><div class="empty-symbol">NH₃</div><h2>从一个还原批次开始</h2><p>${state.canEdit?'填写开工时间与初始温度，或先体验完整的 127 小时演示。':'暂无可查看的批次，请等待编辑账号创建或恢复数据。'}</p><div class="empty-actions"><button class="btn primary" data-action="batch">${icon('plus')}新建还原批次</button><button class="btn" data-action="demo">查看演示</button></div></div>`;return;}
-  if(state.tab==='data'){content.innerHTML=dataView()+concentrationTable();bindDataFilter();return;}
+  if(state.tab==='data'){content.innerHTML=unifiedDataView();bindSamplingFilter();return;}
   if(state.tab==='plan'){content.innerHTML=planView()+waterPlanSection();return;}
   if(state.detail.batch.status==='draft'){content.innerHTML=`<div class="empty-state"><div class="empty-symbol">01</div><h2>计划就绪，等待开工</h2><p>开工时间 ${fmt(state.detail.batch.start_time)}，初始温度 ${state.detail.batch.initial.map(v=>num(v)).join(' / ')}℃。<br>可先查看、调整计划；启动后快照将锁定。</p><div class="empty-actions"><button class="btn primary" data-action="start">启动本批次</button><button class="btn" data-action="show-plan">查看还原计划</button></div></div>`;return;}
   content.innerHTML=monitorView();initCharts();

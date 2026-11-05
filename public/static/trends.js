@@ -17,7 +17,7 @@ function renderMonitor(){
         <div id="completed-stage-legend" class="completed-stage-legend stage-legend-top">${completedLegend()}</div>
         <div class="chart combined-chart" id="chart-0" role="img" tabindex="0" aria-label="床层温度、压力、出塔水汽、进塔水汽、升温升压速率与氨水浓度综合趋势"></div>
       </div></div>
-    </div><div class="chart-legend"><span class="legend-item"><i class="legend-dashed"></i>计划从开工时刻绘制；速率为近2小时拟合值；氨水按同单位分采样点绘线</span><span class="muted">文字说明保留，不绘事件竖线及标点</span></div></section>
+    </div><div class="chart-legend"><span class="legend-item"><i class="legend-dashed"></i>计划从开工时刻绘制；速率为近2小时拟合值；氨水按同单位分采样点绘线</span><span class="muted">水汽仅绘实际曲线，计划浓度见游标；文字说明保留</span></div></section>
     <aside class="panel timeline-panel"><div class="panel-header"><div class="section-title">${icon('clock')}事件时间线 <span class="pill">${state.detail.timeline.length}</span></div><button class="text-btn" data-action="event">${icon('plus')}事件</button></div><div class="timeline-filter">${[['all','全部'],['operation','现场操作'],['annotation','标记'],['stage','阶段']].map(([value,name])=>`<button class="filter-chip ${state.filter===value?'active':''}" data-filter="${value}">${name}</button>`).join('')}</div><div class="timeline-list" id="timeline-list">${timelineItems()}</div><div class="timeline-footer">${icon('check')}点击事件定位趋势 · 悬停可编辑</div></aside>
   </div>`;
 }
@@ -49,13 +49,8 @@ function initTrendCharts(){
   combined.push(actualStageArea(),...annotationTextSeries());
   ensureWaterPoint();
   for(const line of concentrationSeries('water').filter(line=>line.name===state.waterPoint))combined.push({...line,id:'actual-water-'+line.id,channel:4,role:'actual',yAxisIndex:2,name:'水汽 · '+line.name});
-  for(let i=0;i<d.batch.plan.length;i++){
-    const points=grid.filter(point=>point.reference?.stage_index===i&&point.water_ppmv!=null);if(!points.length)continue;
-    combined.push({id:`plan-water-${i}`,channel:4,role:'plan',name:'水汽 · 计划'+(d.water_plan[i]?.kind==='upper'?'上限':'参考'),type:'line',yAxisIndex:2,data:points.map(point=>[ms(point.timestamp),point.water_ppmv]),showSymbol:false,symbol:'none',silent:true,lineStyle:{width:1.8,type:'dashed',color:'#439fd1',opacity:.75}});
-  }
   const inletPoint=ensureWaterPoint('inlet_water');
   for(const line of concentrationSeries('inlet_water').filter(line=>line.name===inletPoint))combined.push({...line,id:'actual-inlet-water-'+line.id,channel:10,role:'actual',yAxisIndex:2,name:'进塔水汽 · '+line.name});
-  if(grid.length)combined.push({id:'plan-inlet-water',channel:10,role:'plan',name:'进塔水汽浓度 · 计划上限',type:'line',yAxisIndex:2,data:grid.map(point=>[ms(point.timestamp),d.inlet_water_limit_ppmv]),showSymbol:false,symbol:'none',silent:true,lineStyle:{width:1.8,type:'dashed',color:'#d15c83',opacity:.8}});
   const ammonia=concentrationSeries('ammonia');
   for(const line of ammonia)combined.push({...line,channel:9,role:'actual',yAxisIndex:5});
   state.trendSources=[combined];sizeTrendSurface();

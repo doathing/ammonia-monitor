@@ -107,22 +107,23 @@ function curveLabelGraphics(chart,series){
     if(group.role!=='actual'||!points.length)continue;
     const line=group.lines[0];
     const name=group.channel===9?`氨水 · ${line.name}`:trendChannels[group.channel].name;
-    const text=`${name} · 实际`;
-    entries.push({key:group.key,points,text,color:line.lineStyle?.color||trendChannels[group.channel].color});
+    entries.push({key:group.key,points,text:name,color:line.lineStyle?.color||trendChannels[group.channel].color});
   }
   const height=size+8,graphics=[];
   // Place curves with fewer available anchors first.
   entries.sort((a,b)=>a.points.length-b.points.length);
   for(const entry of entries){
-    const width=Math.min(measure.measureText(entry.text).width+14,bounds.right-bounds.left);
+    const textWidth=measure.measureText(entry.text).width+2;
+    const width=Math.min(Math.ceil(textWidth)+14,bounds.right-bounds.left);
+    const labelSize=size*Math.min(1,Math.max(1,width-14)/textWidth);
     const box=curveLabelBox(entry.points,width,height,bounds,ink,placed);
     if(!box)continue;
     placed.push(box);
     graphics.push({id:`curve-label-${entry.key}`,type:'group',silent:true,children:[
       {type:'rect',z:9,shape:{x:box.x,y:box.y,width,height,r:3},style:{fill:'rgba(255,255,255,.91)'}},
-      {type:'text',z:10,style:{x:box.x+7,y:box.y+height/2,text:entry.text,fontSize:size,
-        fontWeight:600,fontFamily:'"Segoe UI","Microsoft YaHei",sans-serif',fill:entry.color,
-        width:Math.max(0,width-14),overflow:'truncate',ellipsis:'…',verticalAlign:'middle'}}
+      {type:'text',z:10,style:{x:box.x+7,y:box.y+height/2,text:entry.text,
+        font:`600 ${labelSize}px "Segoe UI","Microsoft YaHei",sans-serif`,
+        fill:entry.color,verticalAlign:'middle'}}
     ]});
   }
   return graphics;

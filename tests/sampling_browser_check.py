@@ -43,27 +43,33 @@ with sync_playwright() as p:
     first=page.locator('#sample-table tr').first
     assert '样点甲' in first.inner_text() and '样点乙' in first.inner_text()
     assert first.locator('td').nth(2).inner_text()=='—'
-    assert first.locator('[data-action="edit-concentration"]').count()==2
-    checks.append('one combined table, explicit descending time order, concentration-only newest row and multiple points/units preserved')
-    assert page.locator('[data-action="edit-sample"]').count()==len(detail['samples'])
-    assert page.locator('[data-action="edit-concentration"]').count()==sum(len(v) for v in detail['concentrations'].values())
-    checks.append('every original temperature/pressure and concentration record has its own edit action')
+    assert first.get_by_role('button',name='编辑',exact=True).count()==1
+    assert first.get_by_role('button',name='删除',exact=True).count()==1
+    tools=page.locator('.sampling-tools')
+    assert tools.get_by_role('button',name='添加数据',exact=True).count()==1
+    assert tools.locator('[data-action="sample"],[data-action="water"],[data-action="inlet-water"],[data-action="ammonia"]').count()==0
+    tools.get_by_role('button',name='添加数据',exact=True).click()
+    for name in ['t1','water_value','inlet_water_value','ammonia_value']:
+        assert page.locator(f'#cursor-readings-form [name="{name}"]').is_visible()
+    page.keyboard.press('Escape')
+    checks.append('unified add form and row actions for a concentration-only row')
     page.locator('#data-search').fill('样点甲');assert page.locator('#sample-table tr').count()==1
     page.locator('#data-search').fill('不存在的采样点');assert '没有符合' in page.locator('#sample-table').inner_text()
     page.locator('#data-search').fill('');assert page.locator('#sample-table tr').count()==len(times)
     checks.append('one search filters both time and concentration sample metadata without losing records')
-    page.locator('[data-action="edit-concentration"][data-id="merged-a"]').click()
+    first.get_by_role('button',name='编辑',exact=True).click()
+    page.locator('#modal [data-action="edit-concentration"][data-id="merged-a"]').click()
     page.locator('[name="value"]').fill('13');page.locator('[name="note"]').fill('修改后备注')
     page.get_by_role('button',name='保存浓度修正',exact=True).click()
     page.wait_for_function('!document.querySelector("#modal").open')
     page.get_by_text('修改后备注',exact=True).wait_for()
     assert '修改后备注' in page.locator('#sample-table tr').first.inner_text()
-    page.locator('[data-action="edit-concentration"][data-id="merged-b"]').click()
+    first.get_by_role('button',name='删除',exact=True).click()
     page.once('dialog',lambda dialog:dialog.accept())
-    page.get_by_role('button',name='删除记录',exact=True).click()
-    page.wait_for_function('!document.querySelector("#modal").open')
-    page.wait_for_function('!document.querySelector("#sample-table [data-id=merged-b]")')
-    assert page.locator('#sample-table [data-id="merged-b"]').count()==0
+    page.locator('#modal [data-action="delete-concentration"][data-id="merged-b"]').click()
+    first.get_by_text('样点乙',exact=True).wait_for(state='hidden')
+    assert first.get_by_text('样点甲',exact=True).is_visible()
+    assert first.locator('[data-action="delete-concentration"][data-id="merged-a"]').is_visible()
     checks.append('concentration edit and delete refresh the combined table and preserve independent records')
     page.screenshot(path=str(OUT/'combined-sampling-desktop.png'),full_page=True)
     page.set_viewport_size({'width':390,'height':844})
@@ -72,6 +78,8 @@ with sync_playwright() as p:
     guest=context('guest');view=guest.new_page();view.goto('http://sampling.test/');view.wait_for_function('state.detail?.batch');view.get_by_role('button',name='读数与数据',exact=True).click()
     assert view.locator('[data-action="edit-concentration"]').first.is_hidden()
     assert view.locator('[data-action="edit-sample"]').first.is_hidden()
+    assert view.locator('.sampling-tools [data-action="next-reading"]').is_hidden()
+    assert view.locator('#sample-table [data-action^="delete-"]').first.is_hidden()
     assert view.locator('#sample-table tr').count()==len(times)
     checks.append('narrow screens can scroll; guest sees all data with edit controls hidden')
     assert not errors,errors

@@ -104,10 +104,10 @@ function curveLabelGraphics(chart,series){
   for(const group of groups.values()){
     const segments=curveLabelSegments(chart,group.lines,from,to);
     const points=curveLabelSamples(segments,bounds,ink);
-    if(!points.length)continue;
+    if(group.role!=='actual'||!points.length)continue;
     const line=group.lines[0];
     const name=group.channel===9?`氨水 · ${line.name}`:trendChannels[group.channel].name;
-    const text=`${name} · ${group.role==='plan'?'计划':'实际'}`;
+    const text=`${name} · 实际`;
     entries.push({key:group.key,points,text,color:line.lineStyle?.color||trendChannels[group.channel].color});
   }
   const height=size+8,graphics=[];

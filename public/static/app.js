@@ -222,7 +222,7 @@ document.addEventListener('click',async event=>{
       case 'ammonia':concentrationModal('ammonia');break;
       case 'edit-concentration':concentrationModal(action.dataset.kind,state.detail.concentrations[action.dataset.kind].find(r=>r.id===id));break;
       case 'delete-concentration':await deleteConcentration(action.dataset.kind,id);break;
-      case 'edit-sampling-row':chooseSamplingRecord(Number(action.dataset.time),'edit');break;
+      case 'edit-sampling-row':editSamplingRowModal(Number(action.dataset.time));break;
       case 'delete-sampling-row':chooseSamplingRecord(Number(action.dataset.time),'delete');break;
       case 'edit-sample':sampleModal(state.detail.samples.find(s=>s.id===id));break;
       case 'mark-sample':{const s=state.detail.samples.find(s=>s.id===id);eventModal({timestamp:s.timestamp,kind:'annotation',channel:'t1',value:s.t1});break;}

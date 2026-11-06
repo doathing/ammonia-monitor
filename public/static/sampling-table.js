@@ -41,7 +41,60 @@ function samplingRowActions(row){
   const action=(operation,label)=>records.length===1?samplingRecordButton(records[0],operation,label,true):
     `<button type="button" class="text-btn" data-action="${operation}-sampling-row" data-time="${timestamp}">${label}</button>`;
   const mark=row.thermal?`<button class="text-btn" data-action="mark-sample" data-id="${esc(row.thermal.id)}">标记</button>`:'';
-  return `<div class="row-actions">${action('edit','编辑')}${action('delete','删除')}${mark}</div>`;
+  return `<div class="row-actions"><button type="button" class="text-btn" data-action="edit-sampling-row" data-time="${timestamp}">编辑</button>${action('delete','删除')}${mark}</div>`;
+}
+
+function editSamplingRowModal(timestamp){
+  if(!requireStarted())return;
+  const row=samplingGroups().find(item=>ms(item.timestamp)===timestamp);
+  if(!row)return toast('这条采样记录已更新，请刷新后重试',true);
+  const concentrations=['water','inlet_water','ammonia'].flatMap(kind=>
+    (row[kind].length?row[kind]:[null]).map(record=>({kind,record})));
+  const fields=concentrations.map(({kind,record},i)=>{
+    const unit=record?.unit||(kind==='water'?'g/m3':kind==='inlet_water'?'ppmv':'%');
+    const unitLabel=kind==='water'?'g/m³':ammoniaUnits[unit]||unit;
+    const point=record?.point?` · ${esc(record.point)}`:'';
+    const basis=kind==='water'?`<small>换算基准 ${num(record?.temperature_c??0,2)}℃ / ${num(record?.pressure_kpa??101.325,3)} kPa（绝压）</small>`:'';
+    const options=kind==='water'?`<details><summary>调整换算基准</summary><div class="form-grid">
+      <label class="field">换算基准<select name="basis-${i}">${Object.entries(basisNames).map(([key,label])=>`<option value="${key}" ${(record?.basis||'standard0')===key?'selected':''}>${esc(label)}</option>`).join('')}</select></label>
+      <label class="field">自定义温度 / ℃<input type="number" step="any" name="temperature-${i}" value="${record?.temperature_c??0}"></label>
+      <label class="field">自定义绝对压力 / kPa<input type="number" step="any" name="pressure-${i}" value="${record?.pressure_kpa??101.325}"></label>
+      </div></details>`:kind==='ammonia'?`<label class="field">浓度单位<select name="unit-${i}">${Object.entries(ammoniaUnits).map(([key,label])=>`<option value="${esc(key)}" ${unit===key?'selected':''}>${esc(label)}</option>`).join('')}</select></label>`:'';
+    return `<fieldset class="cursor-reading-group"><legend>${esc(concentrationNames[kind])}${point}</legend>
+      <div class="form-grid"><label class="field">浓度${kind==='ammonia'?'':' / '+esc(unitLabel)}<input type="number" name="concentration-${i}" min="0" step="any" value="${record?.value??''}" ${record?'required':''}>${basis}</label>
+      <label class="field">采样点<input name="point-${i}" maxlength="120" value="${esc(record?.point||'')}" ${kind==='ammonia'&&record?'required':''}></label>
+      <label class="field full">备注<input name="note-${i}" maxlength="4000" value="${esc(record?.note||'')}"></label></div>${options}</fieldset>`;
+  }).join('');
+  modal('修正采样读数',`<form><p class="modal-copy">可同时修改同一时刻的温压和各项浓度。没有实测值的项目可留空。修改采样时间会一起移动本行数据。</p>
+    <label class="field">采样时间 · 北京时间<input name="timestamp" type="datetime-local" step="1" value="${localInput(row.timestamp,true)}" required></label>
+    <fieldset class="cursor-reading-group"><legend>温压读数</legend><div class="form-grid">
+      ${keys.map((key,i)=>`<label class="field">${names[i]} / ${i===3?'MPa':'℃'}<input type="number" name="${key}" step="any" min="${i===3?0:-273.15}" value="${row.thermal?.[key]??''}" ${row.thermal?'required':''}></label>`).join('')}
+    </div></fieldset>${fields}${formFooter('保存修正')}</form>`,true);
+  wireForm(async form=>{
+    const thermal=keys.map(key=>form.get(key));
+    const hasThermal=thermal.some(value=>value!=='');
+    if(hasThermal&&thermal.some(value=>value===''))throw new Error('温压请同时填写三个床层温度和系统压力。');
+    const sample=hasThermal?{id:row.thermal?.id,...Object.fromEntries(keys.map((key,i)=>[key,Number(thermal[i])]))}:null;
+    const values=[];
+    for(const [i,{kind,record}] of concentrations.entries()){
+      const value=form.get(`concentration-${i}`);
+      if(value==='')continue;
+      const point=form.get(`point-${i}`).trim();
+      if(kind==='ammonia'&&!point)throw new Error('请填写氨水采样点名称。');
+      const entry={id:record?.id,kind,value:Number(value),point,note:form.get(`note-${i}`),
+        unit:kind==='water'?'g/m3':kind==='inlet_water'?'ppmv':form.get(`unit-${i}`)};
+      if(kind==='water'){
+        const basis=form.get(`basis-${i}`);
+        const temperature=form.get(`temperature-${i}`),pressure=form.get(`pressure-${i}`);
+        if(basis==='custom'&&(temperature===''||pressure===''))throw new Error('请填写自定义换算温度和绝对压力。');
+        Object.assign(entry,{basis,temperature_c:basis==='custom'?Number(temperature):basis==='ambient25'?25:0,
+          pressure_kpa:basis==='custom'?Number(pressure):101.325});
+      }
+      values.push(entry);
+    }
+    await api(batchPath('/sampling-row'),{method:'PUT',body:{original_timestamp:row.timestamp,timestamp:isoInput(form.get('timestamp')),sample,concentrations:values}});
+    closeModal();await refresh();toast('采样读数已修正，曲线与速率已更新');
+  });
 }
 
 function chooseSamplingRecord(timestamp,operation){

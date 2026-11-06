@@ -25,9 +25,17 @@ with sync_playwright() as p:
             if path=='/api/session/me':r.fulfill(json={'username':role,'role':'editor' if role=='admin' else 'viewer','canEdit':role=='admin'});return
             if path=='/api/batches':r.fulfill(json=[detail['batch']]);return
             if path==f'/api/batches/{bid}':r.fulfill(json=detail);return
-            if '/concentrations/' in path and r.request.method=='PUT':
-                parts=path.split('/');kind,cid=parts[-2:];payload=r.request.post_data_json
-                row=next(x for x in detail['concentrations'][kind] if x['id']==cid);row.update(payload)
+            if path.endswith('/sampling-row') and r.request.method=='PUT':
+                payload=r.request.post_data_json
+                sample=payload['sample']
+                if sample:detail['samples'].append({**sample,'id':'added-thermal','timestamp':payload['timestamp']})
+                for entry in payload['concentrations']:
+                    rows=detail['concentrations'][entry['kind']]
+                    row=next((x for x in rows if x['id']==entry.get('id')),None)
+                    if row is None:
+                        row={'id':'added-'+entry['kind'],'ppmv':entry['value']}
+                        rows.append(row)
+                    row.update({**entry,'timestamp':payload['timestamp']})
                 r.fulfill(json={'ok':True});return
             if '/concentrations/' in path and r.request.method=='DELETE':
                 kind,cid=path.split('/')[-2:];detail['concentrations'][kind]=[x for x in detail['concentrations'][kind] if x['id']!=cid]
@@ -58,9 +66,9 @@ with sync_playwright() as p:
     page.locator('#data-search').fill('');assert page.locator('#sample-table tr').count()==len(times)
     checks.append('one search filters both time and concentration sample metadata without losing records')
     first.get_by_role('button',name='编辑',exact=True).click()
-    page.locator('#modal [data-action="edit-concentration"][data-id="merged-a"]').click()
-    page.locator('[name="value"]').fill('13');page.locator('[name="note"]').fill('修改后备注')
-    page.get_by_role('button',name='保存浓度修正',exact=True).click()
+    for name,value in {'t1':'301','t2':'302','t3':'303','pressure':'5.1','concentration-0':'0.5','concentration-1':'180','concentration-2':'13','note-2':'修改后备注'}.items():
+        page.locator(f'#modal [name="{name}"]').fill(value)
+    page.get_by_role('button',name='保存修正',exact=True).click()
     page.wait_for_function('!document.querySelector("#modal").open')
     page.get_by_text('修改后备注',exact=True).wait_for()
     assert '修改后备注' in page.locator('#sample-table tr').first.inner_text()
@@ -69,7 +77,8 @@ with sync_playwright() as p:
     page.locator('#modal [data-action="delete-concentration"][data-id="merged-b"]').click()
     first.get_by_text('样点乙',exact=True).wait_for(state='hidden')
     assert first.get_by_text('样点甲',exact=True).is_visible()
-    assert first.locator('[data-action="delete-concentration"][data-id="merged-a"]').is_visible()
+    assert first.get_by_text('样点甲',exact=True).is_visible()
+    assert '301.0' in first.inner_text() and '180.00' in first.inner_text()
     checks.append('concentration edit and delete refresh the combined table and preserve independent records')
     page.screenshot(path=str(OUT/'combined-sampling-desktop.png'),full_page=True)
     page.set_viewport_size({'width':390,'height':844})

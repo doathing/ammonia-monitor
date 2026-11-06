@@ -47,6 +47,28 @@ test('batch, atomic cursor validation, concentrations and duplicate handling',as
   const detail=(await api(`/batches/${id}`)).data;assert.equal(detail.samples.length,1);assert.equal(detail.concentrations.inlet_water[0].outside_limit,true);
   assert.equal(detail.concentrations.ammonia[0].note,'云端记录');
 });
+test('combined correction validates and saves the whole sampling row atomically',async()=>{
+  const created=await api('/batches','POST',{name:'整行修正验收',start_time:start,initial:[20,21,22]});
+  const path='/batches/'+created.data.id;
+  const t='2026-10-01T08:30:00+08:00',moved='2026-10-01T08:45:00+08:00';
+  assert.equal((await api(path+'/cursor-readings','POST',{timestamp:t,sample:{t1:30,t2:31,t3:32,pressure:5},ammonia:{value:10,unit:'%',point:'出口'}})).status,200);
+  const before=(await api(path)).data;
+  const entry=before.concentrations.ammonia[0];
+  const edit={original_timestamp:t,timestamp:moved,sample:{...before.samples[0],t1:40},
+    concentrations:[{...entry,value:101},{kind:'inlet_water',unit:'ppmv',value:180}]};
+  assert.equal((await api(path+'/sampling-row','PUT',edit)).status,422);
+  assert.equal((await api(path)).data.samples[0].t1,30);
+  edit.concentrations[0].value=12;
+  assert.equal((await api(path+'/sampling-row','PUT',edit)).status,200);
+  const after=(await api(path)).data;
+  assert.equal(after.samples[0].t1,40);
+  assert.equal(D.millis(after.samples[0].timestamp),D.millis(moved));
+  assert.equal(after.concentrations.ammonia[0].id,entry.id);
+  assert.equal(after.concentrations.ammonia[0].value,12);
+  assert.equal(D.millis(after.concentrations.ammonia[0].timestamp),D.millis(moved));
+  assert.equal(after.concentrations.inlet_water[0].value,180);
+  assert.equal((await api(path+'/sampling-row','PUT',edit)).status,409);
+});
 test('plan overrides, audit filtering and snapshot preservation',async()=>{
   const before=(await api(`/batches/${id}`)).data;
   const stage=structuredClone(before.curve_plan[0]);Object.assign(stage,{name:'自定阶段\n第二行',hours:8,water:{start:500,end:500,unit:'ppmv',kind:'upper'}});
